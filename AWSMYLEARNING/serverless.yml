@@ -1,0 +1,310 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: arumuganainar
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: AWSMYLEARNING
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: eu-north-1
+  httpApi:
+     authorizers:
+       myCognitoAuth:
+         identitySource: $request.header.Authorization
+         issuerUrl: https://cognito-idp.eu-north-1.amazonaws.com/eu-north-1_ZjMJ5Y8GX
+         audience: 
+           - 6k50m5llv7obgfmvoqfkprdij5
+  environment: 
+   CLIENT_ID : ${ssm:/CLIENT_ID}
+   REGION: eu-north-1
+   BUCKET_NAME: banner-images-ads-my-learning
+   BANNER_TABLE_NAME: Banners
+   CATEGORY_TABLE_NAME: Categories
+   CATEGORY_BUCKET_NAME: categories-my-learning
+   SNS_TOPIC: arn:aws:sns:eu-north-1:909907964121:CategoryCleanupTopic
+   PRODUCT_BUCKET_NAME: products-my-learning
+   PRODUCT_TABLE_NAME: products
+   PRODUCT_SNS_TOPIC: arn:aws:sns:eu-north-1:909907964121:ProductCleanupTopic
+   ORDER_QUEUE_URL: https://sqs.eu-north-1.amazonaws.com/909907964121/InsertOrderQueue
+   ORDER_TABLE_NAME: orders
+  iamRoleStatements:
+  - Effect: 'Allow'
+    Action:
+      - dynamodb:PutItem
+    Resource:   
+      - arn:aws:dynamodb:eu-north-1:909907964121:table/Users  
+  - Effect: 'Allow'
+    Action:
+      - s3:PutObject
+    Resource:
+      - arn:aws:s3:::banner-images-ads-my-learning/*  
+  - Effect: 'Allow'
+    Action:
+      - dynamodb:PutItem
+    Resource:   
+      - arn:aws:dynamodb:eu-north-1:909907964121:table/Banners   
+  - Effect: 'Allow'
+    Action:
+      - s3:PutObject
+    Resource:
+      - arn:aws:s3:::categories-my-learning/*     
+  - Effect: 'Allow'
+    Action:
+      - dynamodb:PutItem
+      - dynamodb:UpdateItem
+      - dynamodb:Scan
+      - dynamodb:DeleteItem
+    Resource:   
+      - arn:aws:dynamodb:eu-north-1:909907964121:table/Categories  
+  - Effect: 'Allow'
+    Action:
+      - sns:publish
+    Resource:   
+      - arn:aws:sns:eu-north-1:909907964121:CategoryCleanupTopic     
+  - Effect: 'Allow'
+    Action:
+      - dynamodb:PutItem
+      - dynamodb:UpdateItem
+      - dynamodb:Scan
+      - dynamodb:DeleteItem
+    Resource:   
+      - Fn::GetAtt: [ProductTable, Arn]
+  - Effect: 'Allow'
+    Action:
+      - s3:PutObject
+    Resource:
+      - arn:aws:s3:::products-my-learning/*      
+  - Effect: 'Allow'
+    Action:
+      - sns:publish
+    Resource:   
+      - arn:aws:sns:eu-north-1:909907964121:ProductCleanupTopic    
+  - Effect: 'Allow'
+    Action:
+      - sqs:SendMessage
+      - sqs:ReceiveMessage
+      - sqs:DeleteMessage
+    Resource:   
+      - Fn::GetAtt: [OrdersQueue, Arn]
+  - Effect: 'Allow'
+    Action:
+      - dynamodb:PutItem
+    Resource:   
+      - arn:aws:dynamodb:eu-north-1:909907964121:table/orders   
+  - Effect: 'Allow'
+    Action:
+      - ses:SendEmail
+    Resource:   
+      - arn:aws:ses:eu-north-1:909907964121:identity/arnainar@gmail.com
+
+  # Uncomment to easily set up a custom domain. Read the docs for more details:
+  # https://www.serverless.com/framework/docs/providers/aws/guide/domains
+  # domain: api.example.com
+resources:
+  Resources:
+    UserTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Users #name of the table where users will be stored
+        BillingMode: PAY_PER_REQUEST #Automatically scales read/writes capacity base on usage
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S #"S" means String
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH #HASH inidicates it's the partition key    
+    BannerTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Banners #name of the table where users will be stored
+        BillingMode: PAY_PER_REQUEST #Automatically scales read/writes capacity base on usage
+        AttributeDefinitions:
+          - AttributeName: fileName
+            AttributeType: S #"S" means String
+        KeySchema:
+          - AttributeName: fileName
+            KeyType: HASH #HASH inidicates it's the partition key
+    CategoryTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Categories #name of the table where categories will be stored
+        BillingMode: PAY_PER_REQUEST #Automatically scales read/writes capacity base on usage
+        AttributeDefinitions:
+          - AttributeName: fileName
+            AttributeType: S #"S" means String
+        KeySchema:
+          - AttributeName: fileName
+            KeyType: HASH #HASH inidicates it's the partition key
+    ProductTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: products #name of the table where categories will be stored
+        BillingMode: PAY_PER_REQUEST #Automatically scales read/writes capacity base on usage
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S #"S" means String
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH #HASH inidicates it's the partition key                            
+    BannerImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: banner-images-ads-my-learning
+    CategoriesImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: categories-my-learning
+    ProductsImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: products-my-learning  
+    CategoryCleanupTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: CategoryCleanupTopic  
+    CategoryCleanupSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: arn:aws:sns:eu-north-1:909907964121:CategoryCleanupTopic
+        Protocol: email
+        Endpoint: arnainar@gmail.com
+    ProductCleanupTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ProductCleanupTopic  
+    ProductCleanupSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn: arn:aws:sns:eu-north-1:909907964121:ProductCleanupTopic
+        Protocol: email
+        Endpoint: arnainar@gmail.com 
+    OrdersQueue:
+      Type: AWS::SQS::Queue           
+      Properties:
+        QueueName: InsertOrderQueue
+    OrderTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: orders #name of the table where categories will be stored
+        BillingMode: PAY_PER_REQUEST #Automatically scales read/writes capacity base on usage
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S #"S" means String
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH #HASH inidicates it's the partition key                                
+    OrderServiceEmailIdentity:
+      Type: AWS::SES::EmailIdentity
+      Properties:
+        EmailIdentity: arnainar@gmail.com
+functions:
+  greet:
+    handler: handler.greet
+    events:
+      - httpApi:
+          path: /greet
+          method: get
+  anotherGreet:
+    handler: anotherGreet.anotherGreet      
+    events:
+      - httpApi:
+          path: /greet
+          method: post
+  signUp:
+    handler: Handlers/signUp.signUp
+    events:
+      - httpApi:
+          path: /signUp
+          method: post
+  confirmSignUp:
+    handler: Handlers/confirmSignUp.confirmSignUp
+    events:
+      - httpApi:
+          path: /confirmSignUp
+          method: post
+  signIn:
+    handler: Handlers/signIn.signIn
+    events:
+      - httpApi:
+          path: /signIn
+          method: post
+  signOut:
+    handler: Handlers/signOut.signOut
+    events:
+      - httpApi:
+          path: /signOut
+          method: post                                
+  uploadBanner:
+    handler: Handlers/uploadBanner.getUploadUrl        
+    events:
+      - httpApi:
+          path: /uploadBanner
+          method: post
+  insertCategory:
+    handler: Handlers/insertCategory.insertCategory        
+    events:
+      - httpApi:
+          path: /insertCategory
+          method: post         
+  confirmBanner:
+    handler: Handlers/confirmUpload.confirmUpload        
+    events:
+      - s3:
+          bucket: banner-images-ads-my-learning
+          event: s3:ObjectCreated:Put
+          existing: true
+  updateCategoryImage:
+    handler: Handlers/updateCategoryImage.updateCategoryImage        
+    events:
+      - s3:
+          bucket: categories-my-learning
+          event: s3:ObjectCreated:Put
+          existing: true  
+  cleanupCategory:
+    handler: Handlers/cleanupCategories.cleanupCategory
+    events:
+       -  schedule: rate(2 minutes) 
+  insertProduct:
+    handler: Handlers/insertProduct.insertProduct        
+    events:
+      - httpApi:
+          path: /insertProduct
+          method: post     
+          authorizer:
+            name: myCognitoAuth
+  updateProduct:
+    handler: Handlers/updateProduct.updateProductImage        
+    events:
+      - s3:
+          bucket: products-my-learning
+          event: s3:ObjectCreated:Put
+          existing: true            
+  cleanupProduct:
+    handler: Handlers/cleanupProducts.cleanupProduct
+    events:
+       -  schedule: rate(2 minutes)         
+  getApprovedProducts:
+    handler: Handlers/getApprovedProducts.getApprovedProducts        
+    events:
+      - httpApi:
+          path: /getApprovedProducts
+          method: get   
+  getCategories:
+    handler: Handlers/getAllCategories.getAllCategories        
+    events:
+      - httpApi:
+          path: /getAllCategories
+          method: get    
+  insertOrder:
+    handler: Handlers/insertOrder.insertOrder        
+    events:
+      - httpApi:
+          path: /insertOrder
+          method: post 
+  processOrder:
+    handler: Handlers/processOrder.processOrder        
+    events:
+      - sqs:
+          arn: 
+            Fn::GetAtt: [OrdersQueue, Arn]
+                           
